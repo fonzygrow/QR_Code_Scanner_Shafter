@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Family Engagement Sign-in</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      text-align: center;
+      margin: 0;
+      padding: 20px;
+      background-color: #d9d9d9;
+    }
+    #qr-reader {
+      width: 300px;
+      margin: auto;
+    }
+    #qr-result {
+      margin-top: 20px;
+      font-size: 1.2em;
+    }
+    #qr-iframe {
+      width: 100%;
+      max-width: 800px;
+      height: 80vh;
+      margin: 20px auto 0 auto;
+      border: none;
+      display: none;
+    }
+    .button {
+      margin-top: 20px;
+      padding: 10px 20px;
+      font-size: 1em;
+      background-color: #4C843F;
+      color: white;
+      border: none;
+      border-radius: 5px;
+      cursor: pointer;
+      display: none;
+    }
+    .button:hover {
+      background-color: #3a6931;
+    }
+    #camera-select {
+      margin-top: 10px;
+      padding: 8px;
+      font-size: 1em;
+    }
+  </style>
+</head>
+<body>
+  <h1>Family Engagement Sign-in</h1>
+
+  <select id="camera-select"></select>
+  <div id="qr-reader"></div>
+  <div id="qr-result">Scanning...</div>
+
+  <button id="scan-again" class="button">Scan Again</button>
+  <button id="manual-sign-in" class="button">Manually Sign In</button>
+
+  <iframe id="qr-iframe" src=""></iframe>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html5-qrcode/2.3.8/html5-qrcode.min.js"></script>
+  <script>
+    const resultEl = document.getElementById('qr-result');
+    const iframe = document.getElementById('qr-iframe');
+    const scanAgainButton = document.getElementById('scan-again');
+    const manualSignInButton = document.getElementById('manual-sign-in');
+    const cameraSelect = document.getElementById('camera-select');
+    const qrReader = new Html5Qrcode("qr-reader");
+    let currentCameraId = null;
+
+    function startScanner(cameraId) {
+      qrReader.start(
+        { deviceId: { exact: cameraId } },
+        {
+          fps: 10,
+          qrbox: { width: 250, height: 250 }
+        },
+        onScanSuccess,
+        (errorMessage) => {
+          console.warn("QR Scan Error:", errorMessage);
+        }
+      ).then(() => {
+        // Apply 2x zoom directly to the scanner's video track
+        setTimeout(() => {
+          const video = document.querySelector('#qr-reader video');
+          if (video && video.srcObject) {
+            const [track] = video.srcObject.getVideoTracks();
+            const capabilities = track.getCapabilities();
+            console.log("Camera capabilities:", capabilities); // Log the capabilities
+
+            if (capabilities.zoom) {
+              track.applyConstraints({ advanced: [{ zoom: 2 }] }).then(() => {
+                console.log("Zoom applied successfully.");
+              }).catch(err => {
+                console.warn("Failed to apply zoom:", err);
+              });
+            } else {
+              console.warn("Zoom not supported on this camera.");
+            }
+          }
+        }, 500); // Slight delay to ensure video is attached
+      }).catch(err => {
+        console.error("Failed to start QR reader:", err);
+        resultEl.innerText = "Camera access denied or not supported.";
+      });
+
+      resultEl.innerText = "Scanning...";
+      iframe.style.display = "none";
+      scanAgainButton.style.display = "none";
+      manualSignInButton.style.display = "inline-block";
+    }
+
+    function onScanSuccess(decodedText) {
+      console.log("QR Code scanned: ", decodedText);
+      resultEl.innerText = "Result: " + decodedText;
+
+      if (decodedText.startsWith("https://")) {
+        iframe.src = decodedText;
+        iframe.style.display = "block";
+      } else {
+        iframe.style.display = "none";
+        resultEl.innerText = "Scanned QR is not a valid HTTPS URL.";
+      }
+
+      qrReader.stop().then(() => {
+        console.log("QR scanner stopped.");
+        scanAgainButton.style.display = "inline-block";
+      }).catch((err) => {
+        console.error("Failed to stop the QR scanner:", err);
+      });
+    }
+
+    scanAgainButton.addEventListener('click', () => {
+      if (currentCameraId) {
+        startScanner(currentCameraId);
+      }
+    });
+
+    cameraSelect.addEventListener('change', () => {
+      const selectedId = cameraSelect.value;
+      if (selectedId !== currentCameraId) {
+        qrReader.stop().then(() => {
+          currentCameraId = selectedId;
+          startScanner(currentCameraId);
+        }).catch((err) => {
+          console.error("Error switching camera:", err);
+        });
+      }
+    });
+
+    manualSignInButton.addEventListener('click', () => {
+      iframe.src = "https://forms.office.com/r/bGDRScMXHQ";
+      iframe.style.display = "block";
+      resultEl.innerText = "Manual Sign-In: https://forms.office.com/Pages/ResponsePage.aspx?id=vlty3gOHdUe8Omc4jjTO19KmGQFxxVdNtTzXgFoANtdUMUVZUkpQN0dJQVBGRDNQTjVXV1BWN0kwNy4u";
+
+      qrReader.stop().then(() => {
+        console.log("QR scanner stopped for manual sign-in.");
+        scanAgainButton.style.display = "inline-block";
+      }).catch((err) => {
+        console.error("Failed to stop scanner during manual sign-in:", err);
+      });
+    });
+
+    Html5Qrcode.getCameras().then(cameras => {
+      if (cameras && cameras.length) {
+        cameras.forEach((camera, index) => {
+          const option = document.createElement("option");
+          option.value = camera.id;
+          option.text = camera.label || `Camera ${index + 1}`;
+          cameraSelect.appendChild(option);
+        });
+
+        currentCameraId = cameras[0].id;
+        cameraSelect.value = currentCameraId;
+        startScanner(currentCameraId);
+      } else {
+        resultEl.innerText = "No cameras found.";
+      }
+    }).catch(err => {
+      console.error("Error getting cameras:", err);
+      resultEl.innerText = "Camera access error.";
+    });
+
+    // Test for camera capabilities, including zoom support
+    navigator.mediaDevices.getUserMedia({ video: true })
+      .then(stream => {
+        const [track] = stream.getVideoTracks();
+        const capabilities = track.getCapabilities();
+        console.log("Camera capabilities:", capabilities); // Log the capabilities
+
+        // Optional: clean up
+        track.stop();
+      })
+      .catch(error => {
+        console.error("Could not get camera capabilities:", error);
+      });
+  </script>
+</body>
+</html>
