@@ -3,211 +3,340 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>Shafter Family Engagement Sign-in</title>
+  <title>Arvin Family Engagement Sign-in</title>
 
   <style>
-    body {
-      font-family: "Avenir", "Helvetica Neue", Arial, sans-serif;
-      text-align: center;
+    html, body {
+      height: 100%;
       margin: 0;
-      padding: 0;
+      font-family: "Avenir", "Helvetica Neue", Arial, sans-serif;
       background-color: #d9d9d9;
+      overflow: hidden;
     }
 
-    /* Header Branding */
     header {
       background-color: #4C843F;
       color: white;
-      padding: 20px;
-      font-size: 1.8em;
+      padding: 15px;
+      font-size: 1.6em;
+      text-align: center;
       font-weight: bold;
-      letter-spacing: 0.5px;
     }
 
-    #subheader {
-      background-color: #5A1E5B;
-      color: white;
+    #scan-container {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 15px;
+    }
+
+    #camera-select {
+      margin-top: 10px;
       padding: 8px;
-      font-size: 0.95em;
+      font-size: 1em;
+      border: 2px solid #5A1E5B;
+      border-radius: 6px;
     }
 
     #qr-reader {
       width: 300px;
-      margin: 20px auto;
+      height: 300px;
+      margin-top: 15px;
       border: 4px solid #9CDCF8;
       border-radius: 10px;
       background: white;
     }
 
     #qr-result {
-      margin-top: 20px;
+      margin-top: 15px;
       font-size: 1.2em;
       color: #5A1E5B;
       font-weight: 500;
     }
 
-#qr-iframe {
-  width: 100%;
-  max-width: 800px;
-  height: 700px; /* fixed height */
-  margin: 20px auto;
-  border: 4px solid #F0A028;
-  border-radius: 10px;
-  display: none;
-}
-
     .button {
       margin-top: 15px;
-      padding: 12px 22px;
-      font-size: 1em;
+      padding: 12px 20px;
       background-color: #F0A028;
       color: white;
       border: none;
       border-radius: 6px;
-      cursor: pointer;
       font-weight: bold;
+      cursor: pointer;
     }
 
-    .button:hover {
-      background-color: #d98e1f;
+    /* ---------------- MODAL ---------------- */
+
+    #modal-overlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(0,0,0,0.6);
+      display: none;
+      justify-content: center;
+      align-items: center;
+      z-index: 999;
     }
 
-    #camera-select {
-      margin-top: 15px;
-      padding: 8px;
-      font-size: 1em;
-      border: 2px solid #5A1E5B;
+    #modal-box {
+      width: 500px;
+      height: 900px;
+      background: white;
+      border-radius: 12px;
+      position: relative;
+      overflow: hidden;
+      box-shadow: 0 10px 30px rgba(0,0,0,0.4);
+    }
+
+    #qr-iframe {
+      width: 100%;
+      height: 100%;
+      border: none;
+    }
+
+    #exit-button {
+      position: absolute;
+      top: 10px;
+      right: 10px;
+      background-color: #5A1E5B;
+      color: white;
+      border: none;
+      padding: 8px 12px;
       border-radius: 6px;
+      cursor: pointer;
+      z-index: 2;
     }
   </style>
 </head>
 
 <body>
 
-<header>Shafter Family Engagement</header>
-<div id="subheader">Scan to Sign In</div>
+<header>Arvin Family Engagement</header>
 
-<select id="camera-select"></select>
+<div id="scan-container">
+  <select id="camera-select"></select>
 
-<div id="qr-reader"></div>
-<div id="qr-result">Scanning...</div>
+  <div id="qr-reader"></div>
+  <div id="qr-result">Initializing camera...</div>
 
-<button id="scan-again" class="button">Scan Again</button>
-<button id="manual-sign-in" class="button">Manually Sign In</button>
+  <button id="manual-sign-in" class="button">Manually Sign In</button>
+</div>
 
-<iframe id="qr-iframe" src=""></iframe>
+<!-- MODAL -->
+<div id="modal-overlay">
+  <div id="modal-box">
+    <button id="exit-button">✕ Close</button>
+    <iframe id="qr-iframe"></iframe>
+  </div>
+</div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html5-qrcode/2.3.8/html5-qrcode.min.js"></script>
 
 <script>
   const resultEl = document.getElementById('qr-result');
   const iframe = document.getElementById('qr-iframe');
-  const scanAgainButton = document.getElementById('scan-again');
-  const manualSignInButton = document.getElementById('manual-sign-in');
   const cameraSelect = document.getElementById('camera-select');
+  const manualSignInButton = document.getElementById('manual-sign-in');
+  const exitButton = document.getElementById('exit-button');
+  const modal = document.getElementById('modal-overlay');
+
   const qrReader = new Html5Qrcode("qr-reader");
 
   let currentCameraId = null;
+  let audioCtx = null;
+  let formWatchInterval = null;
 
-  /* 🔊 Beep Sound */
+  // -------------------------
+  // Beep
+  // -------------------------
   function playBeep() {
-  if (!audioCtx) {
-    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-  }
-
-  if (audioCtx.state === "suspended") {
-    audioCtx.resume();
-  }
-
-  const now = audioCtx.currentTime;
-
-  // Create two notes (cheerful rising "ding-ding")
-  const notes = [
-    { freq: 660, time: 0 },     // E5
-    { freq: 880, time: 0.12 }   // A5 (higher, happy lift)
-  ];
-
-  notes.forEach(note => {
-    const osc = audioCtx.createOscillator();
-    const gain = audioCtx.createGain();
-
-    osc.connect(gain);
-    gain.connect(audioCtx.destination);
-
-    osc.type = "sine";
-    osc.frequency.setValueAtTime(note.freq, now + note.time);
-
-    // Smooth attack & decay (prevents harsh beep)
-    gain.gain.setValueAtTime(0, now + note.time);
-    gain.gain.linearRampToValueAtTime(0.15, now + note.time + 0.02);
-    gain.gain.exponentialRampToValueAtTime(0.001, now + note.time + 0.25);
-
-    osc.start(now + note.time);
-    osc.stop(now + note.time + 0.3);
-  });
-}
-
-  function startScanner(cameraId) {
-    qrReader.start(
-      { deviceId: { exact: cameraId } },
-      { fps: 10, qrbox: 250 },
-      onScanSuccess
-    ).catch(err => {
-      resultEl.innerText = "Camera error or permission denied.";
-      console.error(err);
-    });
-
-    resultEl.innerText = "Scanning...";
-    iframe.style.display = "none";
-    scanAgainButton.style.display = "none";
-    manualSignInButton.style.display = "inline-block";
-  }
-
-  function onScanSuccess(decodedText) {
-    playBeep(); // 🔊 SOUND ON SCAN
-
-    resultEl.innerText = "Scanned!";
-    console.log("QR:", decodedText);
-
-    if (decodedText.startsWith("https://")) {
-      iframe.src = decodedText;
-      iframe.style.display = "block";
-    } else {
-      iframe.style.display = "none";
-      resultEl.innerText = "Invalid QR (not a link).";
+    if (!audioCtx) {
+      audioCtx = new (window.AudioContext || window.webkitAudioContext)();
     }
 
-    qrReader.stop().then(() => {
-      scanAgainButton.style.display = "inline-block";
+    audioCtx.resume();
+
+    const now = audioCtx.currentTime;
+
+    [660, 880].forEach((freq, i) => {
+      const osc = audioCtx.createOscillator();
+      const gain = audioCtx.createGain();
+
+      osc.connect(gain);
+      gain.connect(audioCtx.destination);
+
+      osc.frequency.value = freq;
+
+      gain.gain.setValueAtTime(0, now + i * 0.1);
+      gain.gain.linearRampToValueAtTime(0.15, now + i * 0.1 + 0.02);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + i * 0.1 + 0.25);
+
+      osc.start(now + i * 0.1);
+      osc.stop(now + i * 0.1 + 0.3);
     });
   }
 
-  scanAgainButton.addEventListener('click', () => {
-    if (currentCameraId) startScanner(currentCameraId);
+  // -------------------------
+  // Scanner
+  // -------------------------
+  function startScanner(cameraId) {
+    const config = { fps: 10, qrbox: 250 };
+
+    const cameraConfig = cameraId
+      ? { deviceId: cameraId }
+      : { facingMode: "environment" };
+
+    qrReader.start(
+      cameraConfig,
+      config,
+      onScanSuccess
+    ).then(() => {
+      resultEl.innerText = "Scanning...";
+    }).catch(err => {
+      console.error(err);
+      resultEl.innerText = "Camera error";
+    });
+  }
+
+  // -------------------------
+  // QR Success
+  // -------------------------
+  function onScanSuccess(decodedText) {
+    playBeep();
+
+    qrReader.stop().catch(() => {});
+
+    if (decodedText.startsWith("https://")) {
+      enterFormMode(decodedText);
+    } else {
+      resultEl.innerText = "Invalid QR Code";
+      restartScanner();
+    }
+  }
+
+  function restartScanner() {
+    setTimeout(() => {
+      startScanner(currentCameraId);
+    }, 500);
+  }
+
+  // -------------------------
+  // OPEN FORM
+  // -------------------------
+  function enterFormMode(url) {
+    document.getElementById("scan-container").style.display = "none";
+
+    iframe.src = url;
+    modal.style.display = "flex";
+
+    startFormWatcher();
+  }
+
+  // -------------------------
+  // AUTO-CLOSE WATCHER
+  // -------------------------
+  function startFormWatcher() {
+    if (formWatchInterval) clearInterval(formWatchInterval);
+
+    formWatchInterval = setInterval(() => {
+      try {
+        const currentURL = iframe.contentWindow.location.href;
+
+        if (
+          currentURL.includes("responsepage") ||
+          currentURL.includes("thankyou") ||
+          currentURL.includes("forms.office.com/pages")
+        ) {
+          closeFormAutomatically();
+        }
+
+      } catch (e) {
+        // Cross-origin restriction (normal for Microsoft Forms)
+        // fallback relies on user completion timing
+      }
+    }, 1000);
+  }
+
+  // -------------------------
+  // CLOSE FORM
+  // -------------------------
+  function closeFormAutomatically() {
+    clearInterval(formWatchInterval);
+    formWatchInterval = null;
+
+    iframe.src = "";
+    modal.style.display = "none";
+
+    document.getElementById("scan-container").style.display = "flex";
+
+    restartScanner();
+  }
+
+  // -------------------------
+  // MANUAL CLOSE
+  // -------------------------
+  function exitFormMode() {
+    clearInterval(formWatchInterval);
+    formWatchInterval = null;
+
+    closeFormAutomatically();
+  }
+
+  exitButton.addEventListener("click", exitFormMode);
+
+  manualSignInButton.addEventListener("click", () => {
+    enterFormMode("https://forms.office.com/r/4BJRArLqVB");
+    qrReader.stop().catch(() => {});
   });
 
-  manualSignInButton.addEventListener('click', () => {
-    iframe.src = "https://forms.office.com/r/4BJRArLqVB";
-    iframe.style.display = "block";
-    resultEl.innerText = "Manual Sign-In";
+  // -------------------------
+  // Camera setup
+  // -------------------------
+  Html5Qrcode.getCameras()
+    .then(cameras => {
+      if (!cameras || cameras.length === 0) {
+        resultEl.innerText = "No cameras found";
+        return;
+      }
 
+      cameraSelect.innerHTML = "";
+
+      cameras.forEach((camera, i) => {
+        const option = document.createElement("option");
+        option.value = camera.id;
+        option.text = camera.label || `Camera ${i + 1}`;
+        cameraSelect.appendChild(option);
+      });
+
+      currentCameraId = cameras[0].id;
+      cameraSelect.value = currentCameraId;
+
+      startScanner(currentCameraId);
+    })
+    .catch(err => {
+      console.error(err);
+      resultEl.innerText = "Camera initialization failed";
+    });
+
+  cameraSelect.addEventListener("change", () => {
     qrReader.stop().then(() => {
-      scanAgainButton.style.display = "inline-block";
+      currentCameraId = cameraSelect.value;
+      startScanner(currentCameraId);
+    }).catch(() => {
+      startScanner(cameraSelect.value);
     });
   });
 
-  Html5Qrcode.getCameras().then(cameras => {
-    cameras.forEach((camera, i) => {
-      const option = document.createElement("option");
-      option.value = camera.id;
-      option.text = camera.label || `Camera ${i + 1}`;
-      cameraSelect.appendChild(option);
-    });
+  // Unlock audio
+  document.body.addEventListener("click", () => {
+    if (!audioCtx) {
+      audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    }
+    audioCtx.resume();
+  }, { once: true });
 
-    currentCameraId = cameras[0].id;
-    cameraSelect.value = currentCameraId;
-    startScanner(currentCameraId);
-  });
 </script>
 
 </body>
