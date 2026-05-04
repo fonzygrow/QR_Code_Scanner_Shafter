@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>Arvin Family Engagement Sign-in</title>
+  <title>Shafter Family Engagement Sign-in</title>
 
   <style>
     html, body {
@@ -117,7 +117,7 @@
 
 <body>
 
-<header>Arvin Family Engagement</header>
+<header>Shafter Family Engagement</header>
 
 <div id="scan-container">
   <select id="camera-select"></select>
@@ -296,11 +296,11 @@ manualSignInButton.addEventListener("click", () => {
 
   let formURL = "";
 
-  if (headerText === "Arvin Family Engagement") {
-    formURL = "https://forms.office.com/r/bGDRScMXHQ";
-  } else if (headerText === "Shafter Family Engagement") {
-    formURL = "https://forms.office.com/r/4BJRArLqVB";
-  }
+if (headerText.includes("Arvin")) {
+  formURL = "https://forms.office.com/r/bGDRScMXHQ";
+} else if (headerText.includes("Shafter")) {
+  formURL = "https://forms.office.com/r/4BJRArLqVB";
+}
 
   if (formURL) {
     enterFormMode(formURL);
